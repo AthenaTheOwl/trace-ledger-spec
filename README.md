@@ -1,100 +1,100 @@
-# TraceLedger Spec
+# trace-ledger-spec
 
-An open specification and reference implementation for an append-only
-event ledger storing agent traces with enough structure that you can
-replay any decision, regress any policy, and compute any eval against
-historical logs.
+json schema, controlled vocabulary, and reference validator for an
+append-only ledger of agent trace events.
 
-## What this is
+v0.1 ships the spec, the vocab, the validator, and four worked example
+ledgers (one clean, three with planted bugs). later versions will add a
+storage backend, a chain-verify cli, and a replay cli; see
+[STATUS.md](STATUS.md).
 
-LangSmith, Logfire, and Weights & Biases ship observability
-dashboards on top of agent traces. None of them ship an append-only
-ledger with replay-friendly semantics. The CDCP operating-model memo
-plus the 22-step lifecycle name this gap as load-bearing. The EU AI
-Act Article 12 and NIST AI RMF 1.1 require auditability that current
-dashboards do not structurally provide.
+## what's in the box
 
-This repo is the spec, the schema, the SQLite reference
-implementation, the replay CLI, and one worked example replaying a
-`procurement-negotiation-lab` session.
+| path                                      | what it is                                          |
+|-------------------------------------------|-----------------------------------------------------|
+| `spec/trace-event.schema.json`            | canonical event shape, json schema draft 2020-12.   |
+| `spec/event-types.yaml`                   | version-pinned controlled vocabulary for `event_type`. |
+| `spec/VERSION`                            | semver string for the published spec.               |
+| `spec/MIGRATIONS.md`                      | one-row-per-change log for schema + vocab edits.    |
+| `trace_ledger_spec/validator.py`          | pure-python reference validator.                    |
+| `trace_ledger_spec/cli.py`                | `python -m trace_ledger_spec validate` entrypoint.  |
+| `examples/*.jsonl`                        | four worked ledgers: one valid, three negative.     |
+| `tests/`                                  | pytest suite covering schema, seq, hash, and vocab. |
+| `scripts/regen_examples.py`               | regenerate the example ledgers byte-deterministically. |
 
-## Status
-
-v0 scaffold. No implementation yet. Specs in `specs/0001-foundation/`
-name the event schema, the append-only invariants, and the replay
-semantics. PR 0002 lands `spec/trace-event.schema.json` plus the
-RFC-001 document.
-
-## How to run
-
-Placeholder. Will land in spec 0003. The intended invocation:
+## install and run
 
 ```bash
-python -m trace_ledger init runs/example.db
-python -m trace_ledger append runs/example.db \
-  --event examples/events/01_session_start.json
-python -m trace_ledger replay runs/example.db \
-  --policy policies/refusal_v2.yaml \
-  --out reports/replay.json
-python -m trace_ledger eval runs/example.db \
-  --pack ../eval-forge/templates/agent/eval_pack.yaml \
-  --out reports/eval.json
+python -m pip install -e .
+python -m trace_ledger_spec validate
 ```
 
-## Layout
+with no arguments, `validate` walks every `.jsonl` file under
+`examples/` and prints `pass` or `fail` per file. three of the four
+shipped ledgers are intentional negative examples, so the default
+invocation exits 1. to mark those as expected failures:
 
-```
-trace-ledger-spec/
-  README.md
-  LICENSE
-  AGENTS.md
-  .gitignore
-  specs/
-    0001-foundation/
-      requirements.md
-      design.md
-      tasks.md
-      acceptance.md
-  docs/
-    first-pr.md
-  spec/                  # schema + RFC docs; arrives in PR 0002
-  examples/              # worked event streams
-  src/                   # arrives in PR 0003
+```bash
+python -m trace_ledger_spec validate \
+  --expect-fail seq_gap.jsonl \
+  --expect-fail tampered_hash.jsonl \
+  --expect-fail bad_event_type.jsonl
 ```
 
-## Why this exists
+to validate a specific file or directory:
 
-CDCP discipline says traces are typed artifacts, not log strings.
-The `factory/` orchestrator's event-emission pattern in
-`procurement-negotiation-lab` and the
-`ops/event-log/YYYY-MM-DD.jsonl` design from the operating-model
-memo are working prototypes of what this spec formalizes. Nobody
-else's framing matches what the regulators (EU AI Act, NIST RMF)
-actually ask for.
+```bash
+python -m trace_ledger_spec validate path/to/your.jsonl
+python -m trace_ledger_spec validate path/to/dir/
+```
 
-## Three layered claims
+## the event shape
 
-The repo makes three claims, layered:
+every event is one line of a `.jsonl` file. required fields:
 
-1. *Spec.* `trace-event.schema.json` plus RFC-001 are sufficient to
-   describe any agent run such that another tool can re-derive the
-   run's decisions.
-2. *Reference implementation.* A SQLite-backed append-only ledger
-   matches the spec and supports replay + eval against historical
-   ledgers.
-3. *Conformance.* A conformance test suite that other implementations
-   (Postgres, S3, custom) can run to claim spec compliance.
+| field        | type            | rule                                                   |
+|--------------|-----------------|--------------------------------------------------------|
+| `event_id`   | `sha256:<hex>`  | content-addressable hash of the rest of the event.     |
+| `ledger_id`  | string          | constant across one ledger.                            |
+| `seq`        | integer >= 0    | per-ledger monotonic, no gaps, starts at 0.            |
+| `timestamp`  | rfc3339         | utc, format `date-time`.                               |
+| `actor`      | object          | `{type, id, session?}` where type in {agent, human, system, tool}. |
+| `event_type` | string          | drawn from `spec/event-types.yaml`.                    |
+| `payload`    | object          | event-type-specific body; not constrained by schema.   |
+| `prev_hash`  | `sha256:<hex>`  | event_id of the previous event; genesis is sha256:0...0. |
 
-v0 ships claim 1 and claim 2. Claim 3 is a near-term follow-on.
+## validator semantics
 
-## Sibling to
+the reference validator enforces:
 
-- `agent-notary-layer` (receipt schema; they package together as
-  "Agent Audit Infrastructure")
-- `trace-to-eval-harness` (the literal prototype this productizes)
-- `eval-forge` (consumes ledgers for replay-based eval gates)
-- `dream-replay-cli` (consumes ledgers as a primary input source)
+1. each event matches the json schema.
+2. `event_type` is listed in `spec/event-types.yaml`.
+3. `event_id` equals sha256 of canonical-json of the event minus
+   `event_id` itself (sorted keys, no whitespace, utf-8).
+4. across a ledger: `ledger_id` is constant; `seq` starts at 0 and
+   increments by 1 with no gaps; `prev_hash[n] == event_id[n-1]`,
+   with the genesis prev_hash being sha256:0...0.
 
-## License
+## tests
 
-MIT. See [LICENSE](LICENSE).
+```bash
+python -m pytest
+```
+
+covers schema validation, seq monotonicity, content-addressable hash
+verification, and controlled-vocabulary enforcement. also re-validates
+the committed example files so any drift between schema, hash
+function, and shipped fixtures fails ci.
+
+## related
+
+- [PRODUCT_BRIEF.md](PRODUCT_BRIEF.md) — what this is for and what it is not.
+- [SYSTEM_MAP.md](SYSTEM_MAP.md) — pieces and how they fit.
+- [STATUS.md](STATUS.md) — current state, known limits, next feature queue.
+- [AGENTS.md](AGENTS.md) — contract for agents working in this repo.
+- [specs/0001-foundation/](specs/0001-foundation/) — the original
+  requirements / design / tasks / acceptance for the foundation.
+
+## license
+
+mit. see [LICENSE](LICENSE).

@@ -1,0 +1,73 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://traceledger.dev/spec/v0.1/trace-event.schema.json",
+  "title": "trace-event",
+  "description": "canonical shape of a single trace-ledger event. one event per jsonl line.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "event_id",
+    "ledger_id",
+    "seq",
+    "timestamp",
+    "actor",
+    "event_type",
+    "payload",
+    "prev_hash"
+  ],
+  "properties": {
+    "event_id": {
+      "type": "string",
+      "description": "content-addressable hash over the rest of the event, format 'sha256:<hex>'.",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    },
+    "ledger_id": {
+      "type": "string",
+      "description": "stable identifier for the ledger this event belongs to.",
+      "minLength": 1
+    },
+    "seq": {
+      "type": "integer",
+      "description": "per-ledger monotonic counter starting at 0; no gaps allowed.",
+      "minimum": 0
+    },
+    "timestamp": {
+      "type": "string",
+      "description": "rfc3339 / iso 8601 utc timestamp.",
+      "format": "date-time"
+    },
+    "actor": {
+      "type": "object",
+      "description": "who emitted this event.",
+      "additionalProperties": false,
+      "required": ["type", "id"],
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["agent", "human", "system", "tool"]
+        },
+        "id": {
+          "type": "string",
+          "minLength": 1
+        },
+        "session": {
+          "type": "string"
+        }
+      }
+    },
+    "event_type": {
+      "type": "string",
+      "description": "must be a name listed in spec/event-types.yaml for the pinned spec version.",
+      "minLength": 1
+    },
+    "payload": {
+      "type": "object",
+      "description": "event-type-specific body. shape is not constrained by this schema."
+    },
+    "prev_hash": {
+      "type": "string",
+      "description": "event_id of the previous event in this ledger; genesis is sha256:0...0 (64 zeros).",
+      "pattern": "^sha256:[0-9a-f]{64}$"
+    }
+  }
+}
