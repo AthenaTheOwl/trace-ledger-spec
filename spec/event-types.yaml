@@ -1,0 +1,29 @@
+# controlled vocabulary for trace-event.event_type.
+# version-pinned: change to this file MUST bump version and add a row to
+# spec/MIGRATIONS.md.
+
+version: "0.1.0"
+
+event_types:
+  - name: session.start
+    description: marks the start of an agent session.
+  - name: session.checkpoint
+    description: periodic snapshot of session state.
+  - name: session.end
+    description: marks the end of an agent session.
+  - name: tool.call.requested
+    description: an actor requested a tool invocation.
+  - name: tool.call.completed
+    description: a tool invocation completed successfully.
+  - name: tool.call.failed
+    description: a tool invocation failed.
+  - name: model.generation.requested
+    description: a model generation was requested.
+  - name: model.generation.completed
+    description: a model generation completed.
+  - name: policy.decision.evaluated
+    description: a policy decision was evaluated against an input.
+  - name: policy.decision.overridden
+    description: a policy decision was overridden by a human or escalation.
+  - name: ledger.note
+    description: free-form note attached to the ledger.
