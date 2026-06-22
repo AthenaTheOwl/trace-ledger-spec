@@ -8,8 +8,11 @@ def test_no_args_runs_validate_on_examples(capsys):
     rc = main([])
     captured = capsys.readouterr().out
     assert "valid.jsonl" in captured
-    # examples include negative cases, so default exit is non-zero.
-    assert rc != 0
+    # bare `validate` (no args) treats the bundled negative examples as
+    # expected-fail, so the first user action exits 0 while still showing the
+    # validator catching the tamper / gap / vocab cases.
+    assert "fail (expected)" in captured
+    assert rc == 0
 
 
 def test_expect_fail_flags_make_negative_examples_pass(capsys):

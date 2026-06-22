@@ -15,6 +15,13 @@ _HERE = Path(__file__).resolve().parent
 _REPO_ROOT = _HERE.parent
 _DEFAULT_EXAMPLES_DIR = _REPO_ROOT / "examples"
 
+# These bundled examples are intentional negative cases — they demonstrate the
+# validator catching a tampered hash, a seq gap, and an off-vocabulary event
+# type. The bare `validate` (no args) treats them as expected-fail so the first
+# user action exits 0 while still showing the validator working. The hard
+# negative-case assertions live in pytest.
+_KNOWN_NEGATIVE_EXAMPLES = ("bad_event_type.jsonl", "seq_gap.jsonl", "tampered_hash.jsonl")
+
 
 def _resolve_paths(raw_paths: list[str]) -> list[Path]:
     if raw_paths:
@@ -35,7 +42,15 @@ def cmd_validate(args: argparse.Namespace) -> int:
         print(f"no .jsonl files found under {_DEFAULT_EXAMPLES_DIR}", file=sys.stderr)
         return 1
 
-    expect_fail = {Path(p).name for p in (args.expect_fail or [])}
+    # When no explicit --expect-fail and we're walking the default examples dir,
+    # the known negative cases are expected to fail so the bare first action
+    # exits 0. An explicit --expect-fail overrides this default.
+    if args.expect_fail:
+        expect_fail = {Path(p).name for p in args.expect_fail}
+    elif not (args.paths or []):
+        expect_fail = set(_KNOWN_NEGATIVE_EXAMPLES)
+    else:
+        expect_fail = set()
     overall_ok = True
 
     for path in paths:
