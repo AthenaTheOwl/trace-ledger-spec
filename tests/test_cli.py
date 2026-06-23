@@ -38,3 +38,21 @@ def test_validate_specific_file(capsys, examples_dir):
 def test_validate_nonexistent_file_fails(capsys, tmp_path):
     rc = main(["validate", str(tmp_path / "missing.jsonl")])
     assert rc != 0
+
+
+def test_report_summarizes_examples_and_exits_zero(capsys):
+    rc = main(["report"])
+    out = capsys.readouterr().out
+    # the clean control and all three planted-bug ledgers are listed.
+    assert "valid.jsonl" in out
+    assert "bad_event_type.jsonl" in out
+    assert "seq_gap.jsonl" in out
+    assert "tampered_hash.jsonl" in out
+    # the verdict column and the per-rule catch labels are present.
+    assert "PASS" in out
+    assert "FAIL" in out
+    assert "vocab" in out and "chain" in out and "hash" in out
+    assert "1 clean ledger passed, 3 planted-bug ledgers caught" in out
+    assert "all examples behaved as designed." in out
+    # report is read-only over a known-good fixture set; it exits 0.
+    assert rc == 0

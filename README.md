@@ -8,6 +8,31 @@ ledgers (one clean, three with planted bugs). later versions will add a
 storage backend, a chain-verify cli, and a replay cli; see
 [STATUS.md](STATUS.md).
 
+## try it
+
+```
+python -m trace_ledger_spec report
+```
+
+```
+trace-ledger-spec -- reference validator over the committed examples
+
+ledger                ev  verdict  what it exercises                                      caught by
+---------------------------------------------------------------------------------------------------
+valid.jsonl            5  PASS     clean 5-event ledger; satisfies every spec rule
+bad_event_type.jsonl   1  FAIL     event_type off the controlled vocabulary               vocab: event_type 'custom.not_in_vocab' not in controlled vocabulary
+seq_gap.jsonl          4  FAIL     seq jumps 1->3, breaking the prev_hash chain           chain: seq gap (expected 2, got 3)
+tampered_hash.jsonl    5  FAIL     payload altered; event_id no longer matches its bytes  hash: event_id mismatch (recomputed hash differs)
+
+1 clean ledger passed, 3 planted-bug ledgers caught (vocab / chain / hash).
+all examples behaved as designed.
+```
+
+read-only, no network, no args: it validates the four committed ledgers and
+shows the clean one passing and each planted bug (off-vocabulary type, seq
+gap, tampered payload) being caught by the rule it was meant to trip, so you
+can see what the spec actually enforces before adopting it.
+
 ## what's in the box
 
 | path                                      | what it is                                          |
@@ -17,7 +42,7 @@ storage backend, a chain-verify cli, and a replay cli; see
 | `spec/VERSION`                            | semver string for the published spec.               |
 | `spec/MIGRATIONS.md`                      | one-row-per-change log for schema + vocab edits.    |
 | `trace_ledger_spec/validator.py`          | pure-python reference validator.                    |
-| `trace_ledger_spec/cli.py`                | `python -m trace_ledger_spec validate` entrypoint.  |
+| `trace_ledger_spec/cli.py`                | `python -m trace_ledger_spec validate` / `report` entrypoint. |
 | `examples/*.jsonl`                        | four worked ledgers: one valid, three negative.     |
 | `tests/`                                  | pytest suite covering schema, seq, hash, and vocab. |
 | `scripts/regen_examples.py`               | regenerate the example ledgers byte-deterministically. |
