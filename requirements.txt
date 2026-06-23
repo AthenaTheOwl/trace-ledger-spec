@@ -1,0 +1,4 @@
+streamlit>=1.40
+# the app imports the local package's reference validator (jsonschema + pyyaml
+# come in transitively); install the repo itself so streamlit cloud can import it.
+.

@@ -33,6 +33,25 @@ shows the clean one passing and each planted bug (off-vocabulary type, seq
 gap, tampered payload) being caught by the rule it was meant to trip, so you
 can see what the spec actually enforces before adopting it.
 
+## live demo
+
+the no-arg `report` verb, wrapped as an interactive page: it validates the
+committed `examples/*.jsonl` ledgers and shows pass/fail per file plus the
+rule that caught each planted bug. you can also paste or upload your own
+ledger to validate it live. no network, no secrets.
+
+run locally:
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+deploy on streamlit community cloud: new app -> repo
+`AthenaTheOwl/trace-ledger-spec`, branch `main`, main file `streamlit_app.py`.
+
+<!-- live url: https://<your-app>.streamlit.app -->
+
 ## what's in the box
 
 | path                                      | what it is                                          |
