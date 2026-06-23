@@ -18,7 +18,14 @@ from pathlib import Path
 
 import streamlit as st
 
-from trace_ledger_spec.validator import read_jsonl, validate_ledger
+from trace_ledger_spec.validator import (
+    GENESIS_PREV_HASH,
+    compute_event_id,
+    load_vocab,
+    read_jsonl,
+    validate_event,
+    validate_ledger,
+)
 
 REPO = Path(__file__).resolve().parent
 EXAMPLES = REPO / "examples"
@@ -129,6 +136,84 @@ with st.expander("the spec rules the validator enforces"):
         "- across a ledger: `ledger_id` constant; `seq` starts at 0 and increments "
         "by 1 with no gaps; `prev_hash[n] == event_id[n-1]`, genesis prev_hash is sha256:0...0."
     )
+
+st.divider()
+st.subheader("build an event and watch the validator")
+st.caption(
+    "set the fields of a single genesis event; the page runs the real "
+    "`validate_event` (json schema + controlled vocab + self-hash) live as you "
+    "change them. flip a field off-spec to see exactly which rule trips, then "
+    "seal it with the real `compute_event_id` hash function."
+)
+
+vocab_names, vocab_version = load_vocab()
+vocab_sorted = sorted(vocab_names)
+
+b1, b2 = st.columns(2)
+with b1:
+    ledger_id = st.text_input("ledger_id", value="01HZTRACELEDGERDEMO01")
+    seq = st.number_input("seq", min_value=0, value=0, step=1)
+    timestamp = st.text_input("timestamp (rfc3339 utc)", value="2026-06-22T10:00:00.000Z")
+    use_real_type = st.checkbox(
+        "use an event_type from the controlled vocab", value=True,
+        help=f"vocab v{vocab_version}: {len(vocab_sorted)} allowed types",
+    )
+    if use_real_type:
+        event_type = st.selectbox("event_type", vocab_sorted, index=vocab_sorted.index("session.start"))
+    else:
+        event_type = st.text_input("event_type (off-vocab)", value="made.up.type")
+with b2:
+    actor_type = st.selectbox("actor.type", ["agent", "human", "system", "tool"], index=0)
+    actor_id = st.text_input("actor.id", value="demo-agent@v0.1.0")
+    payload_text = st.text_area("payload (json object)", value='{"session_id": "demo-1"}', height=90)
+    prev_hash = st.text_input(
+        "prev_hash", value=GENESIS_PREV_HASH,
+        help="genesis is sha256 + 64 zeros; for a non-genesis event this is the previous event_id",
+    )
+
+payload_ok = True
+try:
+    payload = json.loads(payload_text) if payload_text.strip() else {}
+    if not isinstance(payload, dict):
+        payload_ok = False
+        st.error("payload must be a json object")
+except json.JSONDecodeError as exc:
+    payload_ok = False
+    st.error(f"payload is not valid json: {exc}")
+    payload = {}
+
+if payload_ok:
+    # build the event WITHOUT event_id, then seal it with the real hash engine.
+    body = {
+        "ledger_id": ledger_id,
+        "seq": int(seq),
+        "timestamp": timestamp,
+        "actor": {"type": actor_type, "id": actor_id},
+        "event_type": event_type,
+        "payload": payload,
+        "prev_hash": prev_hash,
+    }
+    sealed_id = compute_event_id(body)  # real engine: content-addressable hash
+
+    seal = st.radio(
+        "event_id",
+        ["seal with the real hash (compute_event_id)", "set a wrong hash on purpose"],
+        index=0, horizontal=True,
+    )
+    event_id = sealed_id if seal.startswith("seal") else "sha256:" + ("0" * 63 + "1")
+    event = {"event_id": event_id, **body}
+
+    st.code(json.dumps(event, indent=2, sort_keys=True), language="json")
+
+    # real engine call: single-event validation (schema + vocab + self-hash).
+    result = validate_event(event, vocab=vocab_names)
+    if result.ok:
+        st.success("PASS — schema, controlled vocab, and self-hash all satisfied.")
+    else:
+        st.error(f"FAIL — {len(result.errors)} rule(s) tripped:")
+        for err in result.errors:
+            st.markdown(f"- `{err}`")
+    st.caption(f"real event_id for these bytes: `{sealed_id}`")
 
 st.divider()
 st.subheader("validate your own ledger")
