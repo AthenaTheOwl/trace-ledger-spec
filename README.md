@@ -1,14 +1,16 @@
 # trace-ledger-spec
 
-json schema, controlled vocabulary, and reference validator for an
-append-only ledger of agent trace events.
+Four committed ledgers. One is clean. The other three each carry a single planted defect — an event type off the vocabulary, a sequence number that skips, a payload edited after its hash was taken. The validator catches all three and names the rule that did it.
 
-v0.1 ships the spec, the vocab, the validator, and four worked example
-ledgers (one clean, three with planted bugs). later versions will add a
-storage backend, a chain-verify cli, and a replay cli; see
-[STATUS.md](STATUS.md).
+## What it does
 
-## try it
+An agent trace is only worth trusting if you cannot quietly change it after the fact. trace-ledger-spec defines that ledger: a JSON Schema for one event, a version-pinned controlled vocabulary for the event types, and a reference validator that checks both the shape of each event and the chain that binds them in order.
+
+Every event is content-addressed. Its `event_id` is the sha256 of its own bytes, and each event names the `event_id` before it, so the file is a hash chain. Edit a payload and the recomputed hash stops matching. Drop or reorder an event and the `prev_hash` link breaks. The spec is the contract; the validator is what enforces it before anyone has to take the ledger on faith.
+
+v0.1 ships the spec, the vocabulary, the validator, and four worked example ledgers — one clean, three with planted bugs. Later versions add a storage backend, a chain-verify CLI, and a replay CLI; see [STATUS.md](STATUS.md).
+
+## Try it
 
 ```
 python -m trace_ledger_spec report
@@ -28,31 +30,25 @@ tampered_hash.jsonl    5  FAIL     payload altered; event_id no longer matches i
 all examples behaved as designed.
 ```
 
-read-only, no network, no args: it validates the four committed ledgers and
-shows the clean one passing and each planted bug (off-vocabulary type, seq
-gap, tampered payload) being caught by the rule it was meant to trip, so you
-can see what the spec actually enforces before adopting it.
+Read-only, no network, no args. It validates the four committed ledgers and shows the clean one passing and each planted bug — off-vocabulary type, seq gap, tampered payload — being caught by the rule it was meant to trip, so you can see what the spec enforces before adopting it.
 
-## live demo
+## Live demo
 
-the no-arg `report` verb, wrapped as an interactive page: it validates the
-committed `examples/*.jsonl` ledgers and shows pass/fail per file plus the
-rule that caught each planted bug. you can also paste or upload your own
-ledger to validate it live. no network, no secrets.
+The no-arg `report` verb, wrapped as an interactive page: it validates the committed `examples/*.jsonl` ledgers and shows pass/fail per file plus the rule that caught each planted bug. You can also paste or upload your own ledger to validate it live. No network, no secrets.
 
-run locally:
+Run locally:
 
 ```bash
 pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
-deploy on streamlit community cloud: new app -> repo
+Deploy on Streamlit Community Cloud: new app -> repo
 `AthenaTheOwl/trace-ledger-spec`, branch `main`, main file `streamlit_app.py`.
 
 <!-- live url: https://<your-app>.streamlit.app -->
 
-## what's in the box
+## What's in the box
 
 | path                                      | what it is                                          |
 |-------------------------------------------|-----------------------------------------------------|
@@ -66,17 +62,14 @@ deploy on streamlit community cloud: new app -> repo
 | `tests/`                                  | pytest suite covering schema, seq, hash, and vocab. |
 | `scripts/regen_examples.py`               | regenerate the example ledgers byte-deterministically. |
 
-## install and run
+## Install and run
 
 ```bash
 python -m pip install -e .
 python -m trace_ledger_spec validate
 ```
 
-with no arguments, `validate` walks every `.jsonl` file under
-`examples/` and prints `pass` or `fail` per file. three of the four
-shipped ledgers are intentional negative examples, so the default
-invocation exits 1. to mark those as expected failures:
+With no arguments, `validate` walks every `.jsonl` file under `examples/` and prints `pass` or `fail` per file. Three of the four shipped ledgers are intentional negative examples, so the default invocation exits 1. To mark those as expected failures:
 
 ```bash
 python -m trace_ledger_spec validate \
@@ -85,16 +78,16 @@ python -m trace_ledger_spec validate \
   --expect-fail bad_event_type.jsonl
 ```
 
-to validate a specific file or directory:
+To validate a specific file or directory:
 
 ```bash
 python -m trace_ledger_spec validate path/to/your.jsonl
 python -m trace_ledger_spec validate path/to/dir/
 ```
 
-## the event shape
+## The event shape
 
-every event is one line of a `.jsonl` file. required fields:
+Every event is one line of a `.jsonl` file. Required fields:
 
 | field        | type            | rule                                                   |
 |--------------|-----------------|--------------------------------------------------------|
@@ -107,9 +100,9 @@ every event is one line of a `.jsonl` file. required fields:
 | `payload`    | object          | event-type-specific body; not constrained by schema.   |
 | `prev_hash`  | `sha256:<hex>`  | event_id of the previous event; genesis is sha256:0...0. |
 
-## validator semantics
+## Validator semantics
 
-the reference validator enforces:
+The reference validator enforces:
 
 1. each event matches the json schema.
 2. `event_type` is listed in `spec/event-types.yaml`.
@@ -119,18 +112,15 @@ the reference validator enforces:
    increments by 1 with no gaps; `prev_hash[n] == event_id[n-1]`,
    with the genesis prev_hash being sha256:0...0.
 
-## tests
+## Tests
 
 ```bash
 python -m pytest
 ```
 
-covers schema validation, seq monotonicity, content-addressable hash
-verification, and controlled-vocabulary enforcement. also re-validates
-the committed example files so any drift between schema, hash
-function, and shipped fixtures fails ci.
+Covers schema validation, seq monotonicity, content-addressable hash verification, and controlled-vocabulary enforcement. It also re-validates the committed example files, so any drift between schema, hash function, and shipped fixtures fails ci.
 
-## related
+## Related
 
 - [PRODUCT_BRIEF.md](PRODUCT_BRIEF.md) — what this is for and what it is not.
 - [SYSTEM_MAP.md](SYSTEM_MAP.md) — pieces and how they fit.
@@ -139,6 +129,6 @@ function, and shipped fixtures fails ci.
 - [specs/0001-foundation/](specs/0001-foundation/) — the original
   requirements / design / tasks / acceptance for the foundation.
 
-## license
+## License
 
-mit. see [LICENSE](LICENSE).
+MIT. See [LICENSE](LICENSE).
