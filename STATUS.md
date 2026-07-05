@@ -22,7 +22,7 @@ v0.1 ships:
   violation).
 - `scripts/regen_examples.py` — regenerates the example ledgers
   byte-deterministically using `validator.compute_event_id`.
-- `tests/` — pytest suite with five files: `test_schema.py`,
+- `tests/` — pytest suite with six files: `test_schema.py`,
   `test_seq.py`, `test_hash.py`, `test_vocab.py`, `test_examples.py`,
   `test_cli.py`.
 - `pyproject.toml` with `[dependency-groups]` for dev deps and
@@ -71,8 +71,3 @@ ordered by smallest unblock first:
    inside the package so `python -m trace_ledger_spec validate` works
    out of the box after `pip install trace-ledger-spec`.
 
-- Resolve factory defect: expected file 'specs/0002-design/requirements.md' is missing
-- Resolve factory defect: expected file 'specs/0002-design/design.md' is missing
-- Resolve factory defect: expected file 'specs/0002-design/tasks.md' is missing
-- Resolve factory defect: expected file 'specs/0002-design/acceptance.md' is missing
-- Resolve factory defect: claude_code review requested patch; inspect defect log
