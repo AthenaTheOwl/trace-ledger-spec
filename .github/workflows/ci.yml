@@ -11,6 +11,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: actions/setup-python@v5
         with:
@@ -24,6 +26,10 @@ jobs:
 
       - name: pytest
         run: python -m uv run --with pytest pytest -q
+      - name: validate examples
+        run: python -m uv run python -m trace_ledger_spec validate
+      - name: check_migration_log
+        run: python -m uv run python scripts/check_migration_log.py
 
       - name: compile python surfaces
         run: |

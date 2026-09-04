@@ -36,19 +36,33 @@ These roles exist in spec ledger; not all are implemented in v0.
 - Spec language is RFC-2119 normative (MUST / SHOULD / MAY). Prose
   around it is plain English.
 
-## Gates (will land in spec 0002)
+## Gates
+
+Built and running in CI (`.github/workflows/ci.yml`):
 
 ```bash
 python -m pytest
-python scripts/voice_lint.py spec/ docs/ README.md
-python scripts/validate_schemas.py spec/
-python scripts/validate_examples.py examples/
-python scripts/check_migration_log.py
+python -m trace_ledger_spec validate      # every examples/*.jsonl; negatives expected-fail
+python scripts/check_migration_log.py     # spec change => VERSION bump + MIGRATIONS row
 ```
 
-The `check_migration_log.py` gate is the load-bearing one. A spec
-change that does not bump the version in `spec/VERSION` and add a
-row to `spec/MIGRATIONS.md` fails the gate.
+`check_migration_log.py` is the load-bearing one. A change to
+`spec/trace-event.schema.json` or `spec/event-types.yaml` that does not
+bump `spec/VERSION` and add a row to `spec/MIGRATIONS.md` fails it, and
+`spec/VERSION` must agree with the `version:` key in `event-types.yaml`.
+Locally it diffs the working tree against `origin/main` (or `HEAD~1`),
+so an unbumped edit fails before it is committed. Named in this file
+since June 2026; built 2026-09-04.
+
+Example validation is the reference validator itself: `python -m
+trace_ledger_spec validate` loads `spec/trace-event.schema.json`,
+checks every ledger under `examples/`, and treats the three planted
+negatives as expected failures. The hard negative assertions live in
+`tests/test_cli.py`. There is no separate `validate_examples.py` or
+`validate_schemas.py`; the CLI is that gate.
+
+Planned, not built (spec 0002): `voice_lint.py` over `spec/`, `docs/`,
+and `README.md`. Do not cite it as if it runs.
 
 ## Out of scope
 
