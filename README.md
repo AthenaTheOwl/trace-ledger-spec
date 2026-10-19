@@ -12,6 +12,11 @@ v0.1 ships the spec, the vocabulary, the validator, and four worked example ledg
 
 ## Try it
 
+[Anchors and evidence scope](docs/anchors-and-evidence-scope.md) explains what
+local chain validation establishes, why a separately retained head matters, and
+how a reviewer can keep consistency, authenticity, factual support and current
+applicability as distinct checks.
+
 ```
 python -m trace_ledger_spec report
 ```
