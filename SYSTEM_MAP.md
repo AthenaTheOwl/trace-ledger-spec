@@ -19,6 +19,10 @@ trace_ledger_spec/                 <-- the reference validator (python package)
     compute_event_id(event)        <-- "sha256:" + sha256(canonical_bytes)
     validate_event(event)          <-- schema + vocab + self-hash for one event
     validate_ledger(events)        <-- per-event checks + chain checks across events
+    loads_event_line(text)         <-- strict json for one line: no repeated keys, no NaN/Infinity,
+                                       no number or string another parser reads differently
+    parse_jsonl(lines, source)     <-- loads_event_line per non-blank line, errors name source:line
+    read_jsonl(path)               <-- parse_jsonl over a .jsonl file
   cli.py                           <-- argparse cli
     validate                       <-- default subcommand
   __main__.py                      <-- "python -m trace_ledger_spec"
@@ -66,6 +70,9 @@ it does not ship:
   hash discipline so the two compose).
 - a replay engine (deferred; needs the storage backend first).
 
-other tools that want to consume trace-ledger ledgers import this
-package's `validator.validate_ledger` to confirm the input conforms
-before they touch it.
+other tools that want to consume trace-ledger ledgers parse each line
+with this package's `read_jsonl` (or `parse_jsonl` / `loads_event_line`
+for text already in memory), then call `validate_ledger` to confirm the
+input conforms before they touch it. parsing with plain `json.loads`
+skips the duplicate-key, number and surrogate checks, which run at read
+time.

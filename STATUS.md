@@ -22,9 +22,9 @@ v0.1 ships:
   violation).
 - `scripts/regen_examples.py` — regenerates the example ledgers
   byte-deterministically using `validator.compute_event_id`.
-- `tests/` — pytest suite with six files: `test_schema.py`,
+- `tests/` — pytest suite with seven files: `test_schema.py`,
   `test_seq.py`, `test_hash.py`, `test_vocab.py`, `test_examples.py`,
-  `test_cli.py`.
+  `test_cli.py`, `test_duplicate_keys.py`.
 - `pyproject.toml` with `[dependency-groups]` for dev deps and
   `[tool.uv]` `package = true` for the hatchling backend.
 
@@ -44,6 +44,11 @@ v0.1 ships:
 - the controlled vocabulary is a flat list of 11 names. there is no
   per-type payload schema yet — `payload` is any object.
 - no conformance suite for second-implementation compliance.
+- numbers are hashed after conversion to a python float, so the reader
+  rejects a number whose decimal value differs from the canonical text
+  it is hashed as (`0.10000000000000000001`, hashed as `0.1`) and an
+  integer outside ±(2^53 − 1). a writer that needs more precision or
+  larger integers has to put them in strings.
 - no signing or notarization. the chain is tamper-evident but not
   authenticated; anyone with write access could rewrite history and
   resign every event_id. signing is a v0.3 question.

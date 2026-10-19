@@ -64,7 +64,7 @@ Deploy on Streamlit Community Cloud: new app -> repo
 | `trace_ledger_spec/validator.py`          | pure-python reference validator.                    |
 | `trace_ledger_spec/cli.py`                | `python -m trace_ledger_spec validate` / `report` entrypoint. |
 | `examples/*.jsonl`                        | four worked ledgers: one valid, three negative.     |
-| `tests/`                                  | pytest suite covering schema, seq, hash, and vocab. |
+| `tests/`                                  | pytest suite covering schema, seq, hash, vocab, and strict line reading. |
 | `scripts/regen_examples.py`               | regenerate the example ledgers byte-deterministically. |
 
 ## Install and run
@@ -117,13 +117,23 @@ The reference validator enforces:
    increments by 1 with no gaps; `prev_hash[n] == event_id[n-1]`,
    with the genesis prev_hash being sha256:0...0.
 
+A ledger line whose json repeats a key in any object, at any nesting level,
+is invalid and is rejected when the file is read, before these rules run.
+So is a line holding `NaN`, `Infinity`, `-Infinity` or a number too large
+for a float.
+So is any line another json parser could read as a different value under the
+same `event_id`: a number whose decimal value differs from the canonical text
+it is hashed as (`0.10000000000000000001` is hashed as `0.1`), an integer
+outside ±(2^53 − 1), or a string or key with an unpaired utf-16 surrogate
+escape such as `\ud800`.
+
 ## Tests
 
 ```bash
 python -m pytest
 ```
 
-Covers schema validation, seq monotonicity, content-addressable hash verification, and controlled-vocabulary enforcement. It also re-validates the committed example files, so any drift between schema, hash function, and shipped fixtures fails ci.
+Covers schema validation, seq monotonicity, content-addressable hash verification, controlled-vocabulary enforcement, and rejection on read of duplicate keys, non-finite or ambiguous numbers, and unpaired surrogate escapes. It also re-validates the committed example files, so any drift between schema, hash function, and shipped fixtures fails ci.
 
 ## Related
 

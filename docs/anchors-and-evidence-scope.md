@@ -21,16 +21,14 @@ not establish that every external action was logged.
 
 Separate four review questions: is the chain internally consistent, does it match
 the observed checkpoint, are its payload claims supported by external evidence,
-and does that evidence cover the current implementation? AIP can organize these
-questions, while the validator supplies the first result. An agent's conclusion
-should not stand in for the raw ledger and checkpoint in the review input.
+and does that evidence cover the current implementation? The validator answers
+only the first. An agent's conclusion should not stand in for the raw ledger and
+checkpoint in the review input.
 
 Try a controlled exercise with a copy of the committed clean example. Retain its
 head externally, alter a payload and recompute the whole chain in a separate
 experimental copy, then compare the retained head. The external comparison should
 reject the replacement even if local validation passes. This is an integration
-exercise, not an additional conformance rule or schema revision.
+exercise; it adds no conformance rule and no schema revision.
 
-The distinction between preserved history and present applicability is also used
-in [AI Product Team's change workflow](https://github.com/3orionkings/ai-product-team/blob/main/workflows/process-change.md).
 No spec file, vocabulary, version or migration row changes with this note.

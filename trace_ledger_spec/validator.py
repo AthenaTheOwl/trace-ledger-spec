@@ -12,8 +12,11 @@ a sequence of events against the chain rules:
 """
 from __future__ import annotations
 
+import decimal
 import hashlib
 import json
+import math
+import re
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -177,15 +180,151 @@ def validate_ledger(events: Iterable[dict[str, Any]]) -> ValidationResult:
     return ValidationResult(ok=not errors, errors=errors)
 
 
-def read_jsonl(path: Path) -> list[dict[str, Any]]:
+class StrictJsonError(ValueError):
+    """a ledger line is json that another parser could read differently."""
+
+
+class DuplicateKeyError(StrictJsonError):
+    """a json object on a ledger line repeats a key."""
+
+    def __init__(self, key: str) -> None:
+        super().__init__(f"duplicate key {key!r} in json object")
+        self.key = key
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    obj: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in obj:
+            raise DuplicateKeyError(key)
+        obj[key] = value
+    return obj
+
+
+class NonFiniteNumberError(StrictJsonError):
+    """a ledger line holds NaN, Infinity, or a number too large for a float."""
+
+    def __init__(self, token: str) -> None:
+        super().__init__(f"non-finite number {token!r} is not valid json")
+        self.token = token
+
+
+class AmbiguousNumberError(StrictJsonError):
+    """a number another parser could read as a value other than the one hashed."""
+
+    def __init__(self, token: str, reason: str) -> None:
+        super().__init__(f"number {token!r} {reason}")
+        self.token = token
+
+
+class LoneSurrogateError(StrictJsonError):
+    """a json string holds an unpaired utf-16 surrogate escape."""
+
+    def __init__(self) -> None:
+        super().__init__("unpaired utf-16 surrogate escape in a json string")
+
+
+# largest integer every ieee-754 double reader holds exactly (rfc 7493 i-json).
+MAX_SAFE_INTEGER = 2**53 - 1
+_LONE_SURROGATE = re.compile(r"[\ud800-\udfff]")
+
+
+def _reject_constant(token: str) -> Any:
+    # python's json accepts the non-standard tokens NaN, Infinity and
+    # -Infinity; rfc 8259 parsers reject them.
+    raise NonFiniteNumberError(token)
+
+
+def _parse_finite_float(token: str) -> float:
+    value = float(token)
+    if not math.isfinite(value):
+        # e.g. 1e400 overflows to inf and would be hashed as Infinity.
+        raise NonFiniteNumberError(token)
+    # canonical_bytes writes the float back with repr(). the line must
+    # spell the same decimal value, or a reader that parses decimals
+    # exactly sees one value while the hash covers another.
+    try:
+        same = decimal.Decimal(token) == decimal.Decimal(repr(value))
+    except decimal.InvalidOperation:
+        same = False
+    if not same:
+        raise AmbiguousNumberError(token, f"is hashed as {value!r}, a different value")
+    return value
+
+
+def _parse_safe_int(token: str) -> int:
+    # more than 16 digits is always out of range; checking first also
+    # keeps int() away from python's digit-count limit.
+    if len(token.lstrip("-")) > 16 or abs(value := int(token)) > MAX_SAFE_INTEGER:
+        raise AmbiguousNumberError(token, "is outside the interoperable range +/-(2**53 - 1)")
+    if value == 0 and token.startswith("-"):
+        raise AmbiguousNumberError(token, "is hashed as 0, a different value")
+    return value
+
+
+def _reject_lone_surrogates(value: Any) -> None:
+    if isinstance(value, str):
+        if _LONE_SURROGATE.search(value):
+            raise LoneSurrogateError()
+    elif isinstance(value, dict):
+        for key, item in value.items():
+            _reject_lone_surrogates(key)
+            _reject_lone_surrogates(item)
+    elif isinstance(value, list):
+        for item in value:
+            _reject_lone_surrogates(item)
+
+
+def loads_event_line(text: str) -> Any:
+    """parse one ledger line, rejecting anything another json parser could
+    read as a different value under the same event_id.
+
+    json parsers disagree on which value of a repeated key wins. python
+    keeps the last one, so `{"args":"x","args":{...}}` would hash and
+    validate here as the event without "x" while a first-wins reader acts
+    on "x". the check applies to objects at every nesting level.
+
+    also rejected, each raising a StrictJsonError:
+    - NaN, Infinity, -Infinity and numbers that overflow a float.
+    - a number whose decimal value differs from the canonical text it is
+      hashed as: 0.10000000000000000001 (hashed as 0.1), 1e-400 (hashed
+      as 0.0), -0 (hashed as 0). spellings of the same value, such as
+      1.50 or 1e2, are accepted.
+    - an integer outside +/-(2**53 - 1), which double-based readers round.
+    - a string or key holding an unpaired utf-16 surrogate escape such as
+      "\\ud800", which some readers replace with u+fffd.
+    """
+    value = json.loads(
+        text,
+        object_pairs_hook=_reject_duplicate_keys,
+        parse_constant=_reject_constant,
+        parse_float=_parse_finite_float,
+        parse_int=_parse_safe_int,
+    )
+    _reject_lone_surrogates(value)
+    return value
+
+
+def parse_jsonl(lines: Iterable[str], source: str) -> list[dict[str, Any]]:
+    """parse ledger lines with loads_event_line, skipping blank lines.
+
+    errors read "<source>:<line>: invalid json: <reason>". pass a text
+    file object, or io.StringIO(text, newline=None) for in-memory text, so
+    lines split only at newlines and never at u+2028 or other characters
+    str.splitlines() treats as breaks.
+    """
     events: list[dict[str, Any]] = []
-    with open(path, "r", encoding="utf-8") as f:
-        for lineno, line in enumerate(f, start=1):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                events.append(json.loads(stripped))
-            except json.JSONDecodeError as exc:
-                raise ValueError(f"{path}:{lineno}: invalid json: {exc}") from exc
+    for lineno, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            events.append(loads_event_line(stripped))
+        except (json.JSONDecodeError, StrictJsonError) as exc:
+            raise ValueError(f"{source}:{lineno}: invalid json: {exc}") from exc
     return events
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    with open(path, "r", encoding="utf-8") as f:
+        return parse_jsonl(f, str(path))

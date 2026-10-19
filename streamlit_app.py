@@ -13,6 +13,7 @@ branch main, main file streamlit_app.py.
 """
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 
@@ -22,6 +23,8 @@ from trace_ledger_spec.validator import (
     GENESIS_PREV_HASH,
     compute_event_id,
     load_vocab,
+    loads_event_line,
+    parse_jsonl,
     read_jsonl,
     validate_event,
     validate_ledger,
@@ -173,11 +176,11 @@ with b2:
 
 payload_ok = True
 try:
-    payload = json.loads(payload_text) if payload_text.strip() else {}
+    payload = loads_event_line(payload_text) if payload_text.strip() else {}
     if not isinstance(payload, dict):
         payload_ok = False
         st.error("payload must be a json object")
-except json.JSONDecodeError as exc:
+except ValueError as exc:
     payload_ok = False
     st.error(f"payload is not valid json: {exc}")
     payload = {}
@@ -230,10 +233,11 @@ elif pasted.strip():
     raw = pasted
 
 if raw.strip():
+    source = uploaded.name if uploaded is not None else "pasted"
     try:
-        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
-    except json.JSONDecodeError as exc:
-        st.error(f"invalid json: {exc}")
+        events = parse_jsonl(io.StringIO(raw, newline=None), source)
+    except ValueError as exc:
+        st.error(str(exc))
     else:
         result = validate_ledger(events)
         if result.ok:
