@@ -7,12 +7,18 @@ first-wins reader of the same file sees the injected value.
 """
 from __future__ import annotations
 
+import io
 import json
 
 import pytest
 
 from trace_ledger_spec.cli import main
-from trace_ledger_spec.validator import compute_event_id, read_jsonl, validate_ledger
+from trace_ledger_spec.validator import (
+    compute_event_id,
+    parse_jsonl,
+    read_jsonl,
+    validate_ledger,
+)
 
 _REAL_ARGS = '"payload":{"args":{"q":"trace ledger v0"}'
 _INJECTED_ARGS = '"payload":{"args":"INJECTED","args":{"q":"trace ledger v0"}'
@@ -101,3 +107,21 @@ def test_sealed_nan_ledger_fails_validate(examples_dir, tmp_path, capsys):
     rc = main(["validate", str(path)])
     assert rc == 1
     assert "non-finite number 'NaN'" in capsys.readouterr().out
+
+
+def test_parse_jsonl_splits_only_at_newlines(examples_dir):
+    # u+2028 is legal raw inside a json string; str.splitlines() breaks on it.
+    first = json.loads((examples_dir / "valid.jsonl").read_text("utf-8").splitlines()[0])
+    first["payload"] = {"s": "a b"}
+    del first["event_id"]
+    first["event_id"] = compute_event_id(first)
+    text = json.dumps(first, ensure_ascii=False) + "\r\n"
+    assert " " in text
+    events = parse_jsonl(io.StringIO(text, newline=None), "pasted")
+    assert validate_ledger(events).ok
+
+
+def test_parse_jsonl_names_source_line_and_key():
+    text = '{"a":1}\n\n{"k":1,"k":2}\n'
+    with pytest.raises(ValueError, match=r"^pasted:3: invalid json: duplicate key 'k'"):
+        parse_jsonl(io.StringIO(text, newline=None), "pasted")

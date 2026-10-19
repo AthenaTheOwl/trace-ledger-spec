@@ -13,6 +13,7 @@ branch main, main file streamlit_app.py.
 """
 from __future__ import annotations
 
+import io
 import json
 from pathlib import Path
 
@@ -22,7 +23,7 @@ from trace_ledger_spec.validator import (
     GENESIS_PREV_HASH,
     compute_event_id,
     load_vocab,
-    loads_event_line,
+    parse_jsonl,
     read_jsonl,
     validate_event,
     validate_ledger,
@@ -231,10 +232,11 @@ elif pasted.strip():
     raw = pasted
 
 if raw.strip():
+    source = uploaded.name if uploaded is not None else "pasted"
     try:
-        events = [loads_event_line(line) for line in raw.splitlines() if line.strip()]
+        events = parse_jsonl(io.StringIO(raw, newline=None), source)
     except ValueError as exc:
-        st.error(f"invalid json: {exc}")
+        st.error(str(exc))
     else:
         result = validate_ledger(events)
         if result.ok:

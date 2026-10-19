@@ -240,15 +240,26 @@ def loads_event_line(text: str) -> Any:
     )
 
 
-def read_jsonl(path: Path) -> list[dict[str, Any]]:
+def parse_jsonl(lines: Iterable[str], source: str) -> list[dict[str, Any]]:
+    """parse ledger lines with loads_event_line, skipping blank lines.
+
+    errors read "<source>:<line>: invalid json: <reason>". pass a text
+    file object, or io.StringIO(text, newline=None) for in-memory text, so
+    lines split only at newlines and never at u+2028 or other characters
+    str.splitlines() treats as breaks.
+    """
     events: list[dict[str, Any]] = []
-    with open(path, "r", encoding="utf-8") as f:
-        for lineno, line in enumerate(f, start=1):
-            stripped = line.strip()
-            if not stripped:
-                continue
-            try:
-                events.append(loads_event_line(stripped))
-            except (json.JSONDecodeError, DuplicateKeyError, NonFiniteNumberError) as exc:
-                raise ValueError(f"{path}:{lineno}: invalid json: {exc}") from exc
+    for lineno, line in enumerate(lines, start=1):
+        stripped = line.strip()
+        if not stripped:
+            continue
+        try:
+            events.append(loads_event_line(stripped))
+        except (json.JSONDecodeError, DuplicateKeyError, NonFiniteNumberError) as exc:
+            raise ValueError(f"{source}:{lineno}: invalid json: {exc}") from exc
     return events
+
+
+def read_jsonl(path: Path) -> list[dict[str, Any]]:
+    with open(path, "r", encoding="utf-8") as f:
+        return parse_jsonl(f, str(path))
