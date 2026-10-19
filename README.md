@@ -121,6 +121,11 @@ A ledger line whose json repeats a key in any object, at any nesting level,
 is invalid and is rejected when the file is read, before these rules run.
 So is a line holding `NaN`, `Infinity`, `-Infinity` or a number too large
 for a float.
+So is any line another json parser could read as a different value under the
+same `event_id`: a number whose decimal value differs from the canonical text
+it is hashed as (`0.10000000000000000001` is hashed as `0.1`), an integer
+outside ±(2^53 − 1), or a string or key with an unpaired utf-16 surrogate
+escape such as `\ud800`.
 
 ## Tests
 
@@ -128,7 +133,7 @@ for a float.
 python -m pytest
 ```
 
-Covers schema validation, seq monotonicity, content-addressable hash verification, controlled-vocabulary enforcement, and rejection of duplicate keys and non-finite numbers on read. It also re-validates the committed example files, so any drift between schema, hash function, and shipped fixtures fails ci.
+Covers schema validation, seq monotonicity, content-addressable hash verification, controlled-vocabulary enforcement, and rejection on read of duplicate keys, non-finite or ambiguous numbers, and unpaired surrogate escapes. It also re-validates the committed example files, so any drift between schema, hash function, and shipped fixtures fails ci.
 
 ## Related
 

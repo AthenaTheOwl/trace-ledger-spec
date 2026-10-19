@@ -1,4 +1,5 @@
-"""strict-read tests: duplicate object keys and non-finite numbers on a ledger line.
+"""strict-read tests: duplicate object keys, non-finite or ambiguous numbers and
+unpaired surrogate escapes on a ledger line.
 
 json parsers disagree on which value of a repeated key wins. python keeps
 the last one, so an extra "args" placed ahead of the real key leaves the
@@ -125,3 +126,75 @@ def test_parse_jsonl_names_source_line_and_key():
     text = '{"a":1}\n\n{"k":1,"k":2}\n'
     with pytest.raises(ValueError, match=r"^pasted:3: invalid json: duplicate key 'k'"):
         parse_jsonl(io.StringIO(text, newline=None), "pasted")
+
+
+def _one_line(text: str):
+    return parse_jsonl(io.StringIO(text + "\n", newline=None), "pasted")
+
+
+@pytest.mark.parametrize(
+    "accepted, rejected",
+    [
+        # same value spelled differently is fine; a different value under
+        # the same canonical text is not.
+        ("0.1", "0.10000000000000000001"),
+        ("1.50", "9007199254740993.0"),
+        ("0.0", "1e-400"),
+        ("1e2", "0e99999999999999999999"),
+        ("-0.0", "-0"),
+        ("9007199254740991", "9007199254740992"),
+        ("-9007199254740991", "-9007199254740992"),
+        pytest.param("0", "1" + "0" * 5000, id="0-5001-digit-int"),
+    ],
+)
+def test_number_read_differently_elsewhere_is_rejected(accepted, rejected):
+    assert _one_line('{"x":' + accepted + "}") == [{"x": json.loads(accepted)}]
+    with pytest.raises(ValueError, match=r"^pasted:1: invalid json: number '"):
+        _one_line('{"x":' + rejected + "}")
+
+
+@pytest.mark.parametrize(
+    "accepted, rejected",
+    [
+        ('{"s":"\\ud83d\\ude00"}', '{"s":"\\ud800"}'),
+        ('{"\\ud83d\\ude00":1}', '{"\\udfff":1}'),
+        ('{"a":["x","\\ud83d\\ude00"]}', '{"a":["x","\\udc00y"]}'),
+    ],
+)
+def test_unpaired_surrogate_escape_is_rejected(accepted, rejected):
+    assert _one_line(accepted)
+    with pytest.raises(ValueError, match=r"^pasted:1: invalid json: unpaired utf-16 surrogate"):
+        _one_line(rejected)
+
+
+def _sealed_line(examples_dir, payload):
+    first = json.loads((examples_dir / "valid.jsonl").read_text("utf-8").splitlines()[0])
+    first["payload"] = payload
+    del first["event_id"]
+    first["event_id"] = compute_event_id(first)
+    return json.dumps(first)
+
+
+@pytest.mark.parametrize(
+    "payload, find, edit, message",
+    [
+        # a raw edit that keeps event_id: python reads both spellings as 0.1.
+        ({"x": 0.1}, '"x": 0.1', '"x": 0.10000000000000000001', "number '0.10000000000000000001'"),
+        # sealed over values other readers cannot hold as written.
+        ({"n": 2**53 + 1}, None, None, "number '9007199254740993'"),
+        ({"\ud800": "a", "\udfff": "b"}, None, None, "unpaired utf-16 surrogate"),
+    ],
+)
+def test_sealed_ambiguous_ledger_fails_validate(examples_dir, tmp_path, capsys, payload, find, edit, message):
+    line = _sealed_line(examples_dir, payload)
+    if find is not None:
+        assert line.count(find) == 1
+        line = line.replace(find, edit)
+    # the attack: a plain json.loads reader validates the line with its hash.
+    assert validate_ledger([json.loads(line)]).ok
+    path = tmp_path / "ambiguous.jsonl"
+    path.write_text(line + "\n", encoding="utf-8")
+    rc = main(["validate", str(path)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert f"{path}:1: invalid json: {message}" in out

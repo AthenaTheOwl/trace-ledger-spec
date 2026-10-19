@@ -23,6 +23,7 @@ from trace_ledger_spec.validator import (
     GENESIS_PREV_HASH,
     compute_event_id,
     load_vocab,
+    loads_event_line,
     parse_jsonl,
     read_jsonl,
     validate_event,
@@ -175,11 +176,11 @@ with b2:
 
 payload_ok = True
 try:
-    payload = json.loads(payload_text) if payload_text.strip() else {}
+    payload = loads_event_line(payload_text) if payload_text.strip() else {}
     if not isinstance(payload, dict):
         payload_ok = False
         st.error("payload must be a json object")
-except json.JSONDecodeError as exc:
+except ValueError as exc:
     payload_ok = False
     st.error(f"payload is not valid json: {exc}")
     payload = {}
