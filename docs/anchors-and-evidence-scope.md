@@ -29,6 +29,6 @@ Try a controlled exercise with a copy of the committed clean example. Retain its
 head externally, alter a payload and recompute the whole chain in a separate
 experimental copy, then compare the retained head. The external comparison should
 reject the replacement even if local validation passes. This is an integration
-exercise, not an additional conformance rule or schema revision.
+exercise; it adds no conformance rule and no schema revision.
 
 No spec file, vocabulary, version or migration row changes with this note.

@@ -64,7 +64,7 @@ Deploy on Streamlit Community Cloud: new app -> repo
 | `trace_ledger_spec/validator.py`          | pure-python reference validator.                    |
 | `trace_ledger_spec/cli.py`                | `python -m trace_ledger_spec validate` / `report` entrypoint. |
 | `examples/*.jsonl`                        | four worked ledgers: one valid, three negative.     |
-| `tests/`                                  | pytest suite covering schema, seq, hash, and vocab. |
+| `tests/`                                  | pytest suite covering schema, seq, hash, vocab, and strict line reading. |
 | `scripts/regen_examples.py`               | regenerate the example ledgers byte-deterministically. |
 
 ## Install and run
@@ -128,7 +128,7 @@ for a float.
 python -m pytest
 ```
 
-Covers schema validation, seq monotonicity, content-addressable hash verification, and controlled-vocabulary enforcement. It also re-validates the committed example files, so any drift between schema, hash function, and shipped fixtures fails ci.
+Covers schema validation, seq monotonicity, content-addressable hash verification, controlled-vocabulary enforcement, and rejection of duplicate keys and non-finite numbers on read. It also re-validates the committed example files, so any drift between schema, hash function, and shipped fixtures fails ci.
 
 ## Related
 

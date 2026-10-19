@@ -22,9 +22,9 @@ v0.1 ships:
   violation).
 - `scripts/regen_examples.py` — regenerates the example ledgers
   byte-deterministically using `validator.compute_event_id`.
-- `tests/` — pytest suite with six files: `test_schema.py`,
+- `tests/` — pytest suite with seven files: `test_schema.py`,
   `test_seq.py`, `test_hash.py`, `test_vocab.py`, `test_examples.py`,
-  `test_cli.py`.
+  `test_cli.py`, `test_duplicate_keys.py`.
 - `pyproject.toml` with `[dependency-groups]` for dev deps and
   `[tool.uv]` `package = true` for the hatchling backend.
 
