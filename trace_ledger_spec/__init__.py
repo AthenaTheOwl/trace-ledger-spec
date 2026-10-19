@@ -7,6 +7,9 @@ from .validator import (
     compute_event_id,
     load_schema,
     load_vocab,
+    loads_event_line,
+    parse_jsonl,
+    read_jsonl,
     validate_event,
     validate_ledger,
 )
@@ -18,6 +21,9 @@ __all__ = [
     "compute_event_id",
     "load_schema",
     "load_vocab",
+    "loads_event_line",
+    "parse_jsonl",
+    "read_jsonl",
     "validate_event",
     "validate_ledger",
 ]
