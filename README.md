@@ -119,6 +119,8 @@ The reference validator enforces:
 
 A ledger line whose json repeats a key in any object, at any nesting level,
 is invalid and is rejected when the file is read, before these rules run.
+So is a line holding `NaN`, `Infinity`, `-Infinity` or a number too large
+for a float.
 
 ## Tests
 

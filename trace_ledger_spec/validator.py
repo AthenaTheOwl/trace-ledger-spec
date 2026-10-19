@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Iterable
@@ -194,15 +195,49 @@ def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
     return obj
 
 
+class NonFiniteNumberError(ValueError):
+    """a ledger line holds NaN, Infinity, or a number too large for a float."""
+
+    def __init__(self, token: str) -> None:
+        super().__init__(f"non-finite number {token!r} is not valid json")
+        self.token = token
+
+
+def _reject_constant(token: str) -> Any:
+    # python's json accepts the non-standard tokens NaN, Infinity and
+    # -Infinity; rfc 8259 parsers reject them.
+    raise NonFiniteNumberError(token)
+
+
+def _parse_finite_float(token: str) -> float:
+    value = float(token)
+    if not math.isfinite(value):
+        # e.g. 1e400 overflows to inf and would be hashed as Infinity.
+        raise NonFiniteNumberError(token)
+    return value
+
+
 def loads_event_line(text: str) -> Any:
-    """parse one ledger line, rejecting any object that repeats a key.
+    """parse one ledger line, rejecting any object that repeats a key and
+    any number that is not a finite json number.
 
     json parsers disagree on which value of a repeated key wins. python
     keeps the last one, so `{"args":"x","args":{...}}` would hash and
     validate here as the event without "x" while a first-wins reader acts
     on "x". the check applies to objects at every nesting level.
+
+    NaN, Infinity, -Infinity and numbers that overflow a float are
+    rejected too. numbers are still hashed after conversion to a python
+    float, so two spellings of a number that round to the same float
+    (0.1 and 0.10000000000000000001) give the same event_id; see
+    STATUS.md known limits.
     """
-    return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
+    return json.loads(
+        text,
+        object_pairs_hook=_reject_duplicate_keys,
+        parse_constant=_reject_constant,
+        parse_float=_parse_finite_float,
+    )
 
 
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
@@ -214,6 +249,6 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
                 continue
             try:
                 events.append(loads_event_line(stripped))
-            except (json.JSONDecodeError, DuplicateKeyError) as exc:
+            except (json.JSONDecodeError, DuplicateKeyError, NonFiniteNumberError) as exc:
                 raise ValueError(f"{path}:{lineno}: invalid json: {exc}") from exc
     return events

@@ -1,4 +1,4 @@
-"""duplicate-key tests: a ledger line whose json repeats an object key.
+"""strict-read tests: duplicate object keys and non-finite numbers on a ledger line.
 
 json parsers disagree on which value of a repeated key wins. python keeps
 the last one, so an extra "args" placed ahead of the real key leaves the
@@ -12,7 +12,7 @@ import json
 import pytest
 
 from trace_ledger_spec.cli import main
-from trace_ledger_spec.validator import read_jsonl, validate_ledger
+from trace_ledger_spec.validator import compute_event_id, read_jsonl, validate_ledger
 
 _REAL_ARGS = '"payload":{"args":{"q":"trace ledger v0"}'
 _INJECTED_ARGS = '"payload":{"args":"INJECTED","args":{"q":"trace ledger v0"}'
@@ -68,3 +68,36 @@ def test_same_key_in_sibling_objects_is_allowed(tmp_path):
     path = tmp_path / "siblings.jsonl"
     path.write_text('{"a":{"k":1},"b":{"k":2}}\n', encoding="utf-8")
     assert read_jsonl(path) == [{"a": {"k": 1}, "b": {"k": 2}}]
+
+
+@pytest.mark.parametrize(
+    "line, token",
+    [
+        ('{"payload":{"x":NaN}}', "NaN"),
+        ('{"payload":{"x":Infinity}}', "Infinity"),
+        ('{"payload":{"x":[-Infinity]}}', "-Infinity"),
+        ('{"payload":{"x":1e400}}', "1e400"),
+    ],
+)
+def test_non_finite_number_rejected(tmp_path, line, token):
+    path = tmp_path / "nonfinite.jsonl"
+    path.write_text(line + "\n", encoding="utf-8")
+    with pytest.raises(
+        ValueError, match=rf"nonfinite\.jsonl:1: .*non-finite number '{token}'"
+    ):
+        read_jsonl(path)
+
+
+def test_sealed_nan_ledger_fails_validate(examples_dir, tmp_path, capsys):
+    # a ledger sealed over NaN still hashes consistently, so only the
+    # reader can catch it.
+    first = json.loads((examples_dir / "valid.jsonl").read_text("utf-8").splitlines()[0])
+    first["payload"] = {"x": float("nan")}
+    del first["event_id"]
+    first["event_id"] = compute_event_id(first)
+    path = tmp_path / "nan.jsonl"
+    path.write_text(json.dumps(first) + "\n", encoding="utf-8")
+    assert "NaN" in path.read_text("utf-8")
+    rc = main(["validate", str(path)])
+    assert rc == 1
+    assert "non-finite number 'NaN'" in capsys.readouterr().out
