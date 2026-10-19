@@ -22,6 +22,7 @@ from trace_ledger_spec.validator import (
     GENESIS_PREV_HASH,
     compute_event_id,
     load_vocab,
+    loads_event_line,
     read_jsonl,
     validate_event,
     validate_ledger,
@@ -231,8 +232,8 @@ elif pasted.strip():
 
 if raw.strip():
     try:
-        events = [json.loads(line) for line in raw.splitlines() if line.strip()]
-    except json.JSONDecodeError as exc:
+        events = [loads_event_line(line) for line in raw.splitlines() if line.strip()]
+    except ValueError as exc:
         st.error(f"invalid json: {exc}")
     else:
         result = validate_ledger(events)

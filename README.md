@@ -117,6 +117,9 @@ The reference validator enforces:
    increments by 1 with no gaps; `prev_hash[n] == event_id[n-1]`,
    with the genesis prev_hash being sha256:0...0.
 
+A ledger line whose json repeats a key in any object, at any nesting level,
+is invalid and is rejected when the file is read, before these rules run.
+
 ## Tests
 
 ```bash

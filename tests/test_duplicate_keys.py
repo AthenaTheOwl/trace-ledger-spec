@@ -1,0 +1,70 @@
+"""duplicate-key tests: a ledger line whose json repeats an object key.
+
+json parsers disagree on which value of a repeated key wins. python keeps
+the last one, so an extra "args" placed ahead of the real key leaves the
+parsed event, its canonical bytes, and the hash chain unchanged while a
+first-wins reader of the same file sees the injected value.
+"""
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from trace_ledger_spec.cli import main
+from trace_ledger_spec.validator import read_jsonl, validate_ledger
+
+_REAL_ARGS = '"payload":{"args":{"q":"trace ledger v0"}'
+_INJECTED_ARGS = '"payload":{"args":"INJECTED","args":{"q":"trace ledger v0"}'
+
+
+@pytest.fixture
+def injected_ledger(examples_dir, tmp_path):
+    """valid.jsonl with "args":"INJECTED" ahead of the real key on line 2."""
+    text = (examples_dir / "valid.jsonl").read_text(encoding="utf-8")
+    assert text.count(_REAL_ARGS) == 1
+    path = tmp_path / "dup_args.jsonl"
+    path.write_text(text.replace(_REAL_ARGS, _INJECTED_ARGS), encoding="utf-8")
+    return path
+
+
+def test_injected_key_is_invisible_to_a_last_wins_parse(injected_ledger):
+    # the attack: parsed last-wins, the edited file still validates with
+    # the committed head, so the hash chain alone cannot catch it.
+    lines = injected_ledger.read_text(encoding="utf-8").splitlines()
+    assert validate_ledger([json.loads(line) for line in lines]).ok
+
+
+def test_read_jsonl_rejects_injected_duplicate_key(injected_ledger):
+    with pytest.raises(ValueError, match=r"dup_args\.jsonl:2: .*duplicate key 'args'"):
+        read_jsonl(injected_ledger)
+
+
+def test_validate_fails_on_injected_duplicate_key(injected_ledger, capsys):
+    rc = main(["validate", str(injected_ledger)])
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert f"fail: {injected_ledger}" in out
+    assert "duplicate key 'args'" in out
+
+
+@pytest.mark.parametrize(
+    "line, key",
+    [
+        ('{"seq":0,"seq":1}', "seq"),
+        ('{"payload":{"tool":"a","tool":"b"}}', "tool"),
+        ('{"payload":{"args":{"q":"a","q":"b"}}}', "q"),
+        ('{"payload":{"items":[{"k":1,"k":2}]}}', "k"),
+    ],
+)
+def test_duplicate_key_rejected_at_every_nesting_level(tmp_path, line, key):
+    path = tmp_path / "dup.jsonl"
+    path.write_text(line + "\n", encoding="utf-8")
+    with pytest.raises(ValueError, match=rf"dup\.jsonl:1: .*duplicate key '{key}'"):
+        read_jsonl(path)
+
+
+def test_same_key_in_sibling_objects_is_allowed(tmp_path):
+    path = tmp_path / "siblings.jsonl"
+    path.write_text('{"a":{"k":1},"b":{"k":2}}\n', encoding="utf-8")
+    assert read_jsonl(path) == [{"a": {"k": 1}, "b": {"k": 2}}]

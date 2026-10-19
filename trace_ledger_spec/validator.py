@@ -177,6 +177,34 @@ def validate_ledger(events: Iterable[dict[str, Any]]) -> ValidationResult:
     return ValidationResult(ok=not errors, errors=errors)
 
 
+class DuplicateKeyError(ValueError):
+    """a json object on a ledger line repeats a key."""
+
+    def __init__(self, key: str) -> None:
+        super().__init__(f"duplicate key {key!r} in json object")
+        self.key = key
+
+
+def _reject_duplicate_keys(pairs: list[tuple[str, Any]]) -> dict[str, Any]:
+    obj: dict[str, Any] = {}
+    for key, value in pairs:
+        if key in obj:
+            raise DuplicateKeyError(key)
+        obj[key] = value
+    return obj
+
+
+def loads_event_line(text: str) -> Any:
+    """parse one ledger line, rejecting any object that repeats a key.
+
+    json parsers disagree on which value of a repeated key wins. python
+    keeps the last one, so `{"args":"x","args":{...}}` would hash and
+    validate here as the event without "x" while a first-wins reader acts
+    on "x". the check applies to objects at every nesting level.
+    """
+    return json.loads(text, object_pairs_hook=_reject_duplicate_keys)
+
+
 def read_jsonl(path: Path) -> list[dict[str, Any]]:
     events: list[dict[str, Any]] = []
     with open(path, "r", encoding="utf-8") as f:
@@ -185,7 +213,7 @@ def read_jsonl(path: Path) -> list[dict[str, Any]]:
             if not stripped:
                 continue
             try:
-                events.append(json.loads(stripped))
-            except json.JSONDecodeError as exc:
+                events.append(loads_event_line(stripped))
+            except (json.JSONDecodeError, DuplicateKeyError) as exc:
                 raise ValueError(f"{path}:{lineno}: invalid json: {exc}") from exc
     return events
