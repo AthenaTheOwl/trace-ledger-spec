@@ -22,8 +22,8 @@ not establish that every external action was logged.
 Separate four review questions: is the chain internally consistent, does it match
 the observed checkpoint, are its payload claims supported by external evidence,
 and does that evidence cover the current implementation? The validator answers
-only the first. An agent's conclusion
-should not stand in for the raw ledger and checkpoint in the review input.
+only the first. An agent's conclusion should not stand in for the raw ledger and
+checkpoint in the review input.
 
 Try a controlled exercise with a copy of the committed clean example. Retain its
 head externally, alter a payload and recompute the whole chain in a separate
